@@ -7,6 +7,8 @@
 #include <sys/resource.h>
 #include <errno.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 struct entry_points {
 #define ENTRYPOINT_ENUM(name, rettype, ...) rettype ( * p_##name )( __VA_ARGS__ );
@@ -118,10 +120,17 @@ extern "C" {
         TRACK(open, pathname, flags);
     }
 
+    // opendir/closedir is not tracked, since they are implemented
+    // using open/close
+
     int socket(int domain, int type, int protocol) {
         TRACK (socket, domain, type, protocol);
     }
-
+    
+    int socketpair(int domain, int type, int protocol, int sv[2]) {
+        TRACK(socketpair, domain, type, protocol, sv);
+    }
+    
     int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
         TRACK (accept, sockfd, addr, addrlen);
     }
@@ -136,6 +145,18 @@ extern "C" {
 
     int dup3 (int oldfd, int newfd, int flag) {
         TRACK(dup3, oldfd, newfd, flag);
+    }
+    
+    int pipe (int fd[2]) {
+        TRACK(pipe, fd);
+    }
+    
+    int pipe2 (int fd[2], int flags) {
+        TRACK(pipe2, fd, flags);
+    }
+
+    int creat(const char *path, mode_t mod) {
+        TRACK(creat, path, mod);
     }
 
 }
