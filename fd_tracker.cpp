@@ -1,34 +1,13 @@
-#include <log/log.h>
-#include <dlfcn.h>
-#include <unistd.h>
-#include <utils/CallStack.h>
-#include <utils/String8.h>
-#include <sys/time.h>
-#include <sys/resource.h>
-#include <errno.h>
-#include <sys/socket.h>
-#include <sys/types.h>
-#include <dirent.h>
+#include "fd_tracker.h"
+#include <assert.h>
+#include <strings.h>
 
-struct entry_points {
-#define ENTRYPOINT_ENUM(name, rettype, ...) rettype ( * p_##name )( __VA_ARGS__ );
+volatile tracking_mode g_tracking_mode = DISABLED;
+struct tracking_info** g_tracking_info = NULL;
 
-#include "entry_points.h"
-    ENTRYPOINT_LIST(ENTRYPOINT_ENUM);
-
-#undef ENTRYPOINT_LIST
-#undef ENTRYPOINT_ENUM
-} g_entry_points;
-
-enum tracking_mode {
-    DISABLED,
-    NOT_TRIGGERED,
-    TRIGGERED,
-};
-
-tracking_mode g_tracking_mode = DISABLED;
-
+__attribute__((constructor))
 void setup() {
+    ALOGE("FD_TRACKER: setup");
 #define ENTRYPOINT_ENUM(name, rettype, ...)                             \
     typedef rettype (*FUNC_##name)(__VA_ARGS__);                        \
     g_entry_points.p_##name = (FUNC_##name) dlsym(RTLD_NEXT, #name);    \
@@ -49,6 +28,8 @@ void setup() {
         ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker");
         return;
     }
+    g_tracking_info = (struct tracking_info**) malloc(sizeof(struct tracking_info*) * (limit.rlim_cur + 1));
+    bzero(g_tracking_info, sizeof(sizeof(struct tracking_info*) * limit.rlim_cur));
     limit.rlim_cur = (rlim_t) ((limit.rlim_cur / 3.0) * 2);
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
@@ -60,10 +41,23 @@ void setup() {
 }
 
 void do_track(int fd) {
-    int x = fd;
+    assert(fd >= 0);
     android::CallStack stack;
     stack.update(3);
-    android::String8 s = stack.toString("");
+
+    if (g_tracking_info[fd] != 0) {
+        if (g_tracking_info[fd]->trace != NULL) {
+            free(g_tracking_info[fd]->trace);
+        }
+        free(g_tracking_info[fd]);
+    } 
+
+    struct tracking_info * info = (struct tracking_info *) malloc(sizeof(struct tracking_info));
+    info->fd = fd;
+    info->trace = strdup(stack.toString(""));
+    info->time = time(0);
+    
+    g_tracking_info[fd] = info;        
 }
 
 void do_trigger() {
@@ -91,11 +85,19 @@ void do_trigger() {
 }
 
 void do_report() {
-
+    struct tracking_info ** info = g_tracking_info;
+    ALOGE("FD_TRACKER: ------ dump begin ------");
+    while (*info != NULL) {
+        ALOGE("FD_TRACKER: fd: %d", (*info)->fd);
+        ALOGE("FD_TRACKER: trace: %s", (*info)->trace);
+        info++;
+    }
+    ALOGE("FD_TRACKER: ------ dump end------");
 }
 
 #define TRACK(name,...)                                         \
     do {                                                        \
+        ALOGE("FD_TRACKER: TRACK %s,", #name);                 \
         int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
         if (g_tracking_mode == TRIGGERED) {                     \
             do_track(ret);                                      \
@@ -113,7 +115,8 @@ void do_report() {
 
 extern "C" {
     int close(int fd) {
-        TRACK(close,fd);
+        int ret = (*g_entry_points.p_close)(fd);
+        return ret;
     }
 
     int open(const char *pathname, int flags) {
