@@ -4,6 +4,7 @@
 
 volatile tracking_mode g_tracking_mode = DISABLED;
 struct tracking_info** g_tracking_info = NULL;
+int g_rlimit_nofile = -1;
 
 __attribute__((constructor))
 void setup() {
@@ -28,8 +29,11 @@ void setup() {
         ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker");
         return;
     }
-    g_tracking_info = (struct tracking_info**) malloc(sizeof(struct tracking_info*) * (limit.rlim_cur + 1));
-    bzero(g_tracking_info, sizeof(sizeof(struct tracking_info*) * limit.rlim_cur));
+
+    g_rlimit_nofile = limit.rlim_cur;
+    g_tracking_info = (struct tracking_info**) malloc(sizeof(struct tracking_info*) * (limit.rlim_cur));
+    bzero(g_tracking_info, sizeof(struct tracking_info*) * limit.rlim_cur);
+    
     limit.rlim_cur = (rlim_t) ((limit.rlim_cur / 3.0) * 2);
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
@@ -41,7 +45,12 @@ void setup() {
 }
 
 void do_track(int fd) {
+    assert(g_tracking_mode = TRIGGERED);
     assert(fd >= 0);
+    if (fd >= g_rlimit_nofile) {
+        ALOGE("FD_TRACKER: fd: %d exceed rlimit: %d?", fd, g_rlimit_nofile);
+        return;
+    }
     android::CallStack stack;
     stack.update(3);
 
@@ -61,6 +70,7 @@ void do_track(int fd) {
 }
 
 void do_trigger() {
+    assert (g_tracking_mode == NOT_TRIGGERED);
     struct rlimit limit;
     int ret = getrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
@@ -85,19 +95,19 @@ void do_trigger() {
 }
 
 void do_report() {
-    struct tracking_info ** info = g_tracking_info;
+    assert(g_tracking_mode == TRIGGERED);
+    struct tracking_info * info = NULL;
     ALOGE("FD_TRACKER: ------ dump begin ------");
-    while (*info != NULL) {
-        ALOGE("FD_TRACKER: fd: %d", (*info)->fd);
-        ALOGE("FD_TRACKER: trace: %s", (*info)->trace);
-        info++;
+    for (int i = 0; i<g_rlimit_nofile; ++i) {
+        info = g_tracking_info[i];
+        ALOGE("FD_TRACKER: fd: %d", info->fd);
+        ALOGE("FD_TRACKER: trace: %s", info->trace);
     }
     ALOGE("FD_TRACKER: ------ dump end------");
 }
 
 #define TRACK(name,...)                                         \
     do {                                                        \
-        ALOGE("FD_TRACKER: TRACK %s,", #name);                 \
         int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
         if (g_tracking_mode == TRIGGERED) {                     \
             do_track(ret);                                      \
@@ -116,6 +126,19 @@ void do_report() {
 extern "C" {
     int close(int fd) {
         int ret = (*g_entry_points.p_close)(fd);
+        if (g_tracking_mode != TRIGGERED) {
+            return ret;
+        }
+        if (fd < 0 || fd >= g_rlimit_nofile) {
+            return ret;
+        }
+        if (g_tracking_info[fd] != NULL) {
+            if (g_tracking_info[fd]->trace != NULL) {
+                free(g_tracking_info[fd]->trace);
+            }
+            free(g_tracking_info[fd]);
+            g_tracking_info[fd] = NULL;
+        } 
         return ret;
     }
 
