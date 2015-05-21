@@ -45,4 +45,5 @@ struct trace_info {
 int str_hash(void *key);
 bool str_equals(void *key_a, void *key_b);
 
+char* md5 (char * data, char * data2);
 #endif  // FD_TRACKER_H

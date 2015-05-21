@@ -3,29 +3,6 @@
 #include <strings.h>
 #include <thread.h>
 #include <cutils/hashmap.h>
-#include<openssl/md5.h>
-
-#define MD_SIZE 16
-
-char* md5 (char * data, char * data2) {
-    MD5_CTX ctx;
-    unsigned char md[MD_SIZE] = {0};
-
-    MD5_Init(&ctx);
-    MD5_Update(&ctx,data,strlen(data));
-    MD5_Update(&ctx,data2,strlen(data2));
-    MD5_Final(md,&ctx);
-
-    char* ret = (char*) malloc(MD_SIZE*2+1);
-    bzero(ret, MD_SIZE*2+1);
-
-    char tmp[3]={0};
-    for(int i=0; i<16; i++ ){
-        sprintf(tmp,"%02X",md[i]);
-        strcat(ret,tmp);
-    }
-    return ret;
-}
 
 volatile tracking_mode g_tracking_mode = DISABLED;
 struct tracking_info** g_tracking_info = NULL;
