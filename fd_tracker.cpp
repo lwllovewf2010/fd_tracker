@@ -1,6 +1,7 @@
 #include "fd_tracker.h"
 #include <assert.h>
 #include <strings.h>
+#include <thread.h>
 
 volatile tracking_mode g_tracking_mode = DISABLED;
 struct tracking_info** g_tracking_info = NULL;
@@ -57,26 +58,34 @@ void do_track(int fd) {
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     
     android::CallStack stack;
-    stack.update(3);
+    stack.update(4);
+
+    std::ostringstream java_stack;
+    art::dump_java_stack(java_stack);
 
     limit.rlim_cur = orig_limit;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     
 
     if (g_tracking_info[fd] != 0) {
-        if (g_tracking_info[fd]->trace != NULL) {
-            free(g_tracking_info[fd]->trace);
+        if (g_tracking_info[fd]->native_stack_trace != NULL) {
+            free(g_tracking_info[fd]->native_stack_trace);
+        }
+        if (g_tracking_info[fd]->java_stack_trace != NULL) {
+            free(g_tracking_info[fd]->java_stack_trace);
         }
         free(g_tracking_info[fd]);
     } 
 
     struct tracking_info * info = (struct tracking_info *) malloc(sizeof(struct tracking_info));
     info->fd = fd;
-    info->trace = strdup(stack.toString(""));
+    info->native_stack_trace = strdup(stack.toString(""));
+    info->java_stack_trace = strdup(java_stack.str().c_str());
     info->time = time(0);
     
     g_tracking_info[fd] = info;
     // ALOGE("FD_TRACKER: %d tracked", fd);
+
 }
 
 void do_trigger() {
@@ -105,7 +114,7 @@ void do_trigger() {
 }
 
 void do_report() {
-    ALOGE("FD_TRACKER: ------ dump begin ------");
+    ALOGE("FD_TRACKER: ****** dump begin ******");
     // assert(g_tracking_mode == TRIGGERED);
     struct tracking_info * info = NULL;
     for (int i = 0; i<g_rlimit_nofile; ++i) {
@@ -113,10 +122,11 @@ void do_report() {
         if (info == NULL) {
             continue;
         }
-        ALOGE("FD_TRACKER: fd: %d", info->fd);
-        ALOGE("FD_TRACKER: trace: %s", info->trace);
+        ALOGE("FD_TRACKER: ------ dumping for fd: %d ------", info->fd);
+        ALOGE("FD_TRACKER: native trace:\n%s", info->native_stack_trace);
+        ALOGE("FD_TRACKER: java trace:\n%s", info->java_stack_trace);
     }
-    ALOGE("FD_TRACKER: ------ dump end------");
+    ALOGE("FD_TRACKER: ****** dump end ******");
 }
 
 #define TRACK(name,...)                                         \
@@ -149,8 +159,11 @@ extern "C" {
             return ret;
         }
         if (g_tracking_info[fd] != NULL) {
-            if (g_tracking_info[fd]->trace != NULL) {
-                free(g_tracking_info[fd]->trace);
+            if (g_tracking_info[fd]->native_stack_trace != NULL) {
+                free(g_tracking_info[fd]->native_stack_trace);
+            }
+            if (g_tracking_info[fd]->java_stack_trace != NULL) {
+                free(g_tracking_info[fd]->java_stack_trace);
             }
             free(g_tracking_info[fd]);
             g_tracking_info[fd] = NULL;

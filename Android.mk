@@ -10,13 +10,18 @@ endef
 
 LOCAL_SRC_FILES = $(call all-c++-files-under, ./)
 
-# LOCAL_C_INCLUDES += \
+LOCAL_CFLAGS := -std=gnu++11
 
+LOCAL_C_INCLUDES += \
+	art/runtime/ \
+	external/libcxx/include \
 
 LOCAL_SHARED_LIBRARIES := \
+	libart \
 	liblog \
 	libdl \
 	libutils \
+	libc++ \
 
 LOCAL_MODULE := libfd_tracker
 

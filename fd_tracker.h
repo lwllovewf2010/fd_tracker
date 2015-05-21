@@ -32,6 +32,8 @@ enum tracking_mode {
 struct tracking_info {
     int fd;
     time_t time;
-    char* trace;
+    char* native_stack_trace;
+    char* java_stack_trace;
 };
+
 #endif  // FD_TRACKER_H
