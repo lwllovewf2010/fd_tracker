@@ -142,6 +142,7 @@ void do_report() {
     ALOGE("FD_TRACKER: ****** dump begin ******");
     hashmapForEach(g_hash_map, dump_trace, NULL);
     ALOGE("FD_TRACKER: ****** dump end ******");
+    g_tracking_mode = DISABLED;
 }
 
 extern "C" {
