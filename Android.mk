@@ -15,6 +15,7 @@ LOCAL_CFLAGS := -std=gnu++11
 LOCAL_C_INCLUDES += \
 	art/runtime/ \
 	external/libcxx/include \
+	external/openssl/include \
 
 LOCAL_SHARED_LIBRARIES := \
 	libart \
@@ -22,6 +23,8 @@ LOCAL_SHARED_LIBRARIES := \
 	libdl \
 	libutils \
 	libc++ \
+	libcrypto \
+	libcutils \
 
 LOCAL_MODULE := libfd_tracker
 
