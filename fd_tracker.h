@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <pthread.h>
 
 struct entry_points {
 #define ENTRYPOINT_ENUM(name, rettype, ...) rettype ( * p_##name )( __VA_ARGS__ );
@@ -39,4 +40,20 @@ int str_hash(void *key);
 bool str_equals(void *key_a, void *key_b);
 
 char* md5 (char * data, char * data2);
+
+class AutoLock {
+public:
+    AutoLock(pthread_mutex_t * mutex) {
+        this->m_mutex = mutex;
+        pthread_mutex_lock(m_mutex);
+    }
+
+    ~AutoLock() {
+        pthread_mutex_unlock(m_mutex);
+    }
+
+private:
+    pthread_mutex_t * m_mutex;
+};
+
 #endif  // FD_TRACKER_H

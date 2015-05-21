@@ -10,6 +10,7 @@ volatile tracking_mode g_tracking_mode = DISABLED;
 int g_rlimit_nofile = -1;
 char** g_hash_array = NULL;
 Hashmap * g_hash_map;
+pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 __attribute__((constructor))
 void setup() {
@@ -51,6 +52,10 @@ void setup() {
 }
 
 void do_track(int fd) {
+    AutoLock lock(&g_mutex);
+    if (g_tracking_mode != TRIGGERED) {
+        return;
+    };
     assert(g_tracking_mode = TRIGGERED);
     assert(fd >= 0);
     if (fd >= g_rlimit_nofile) {
@@ -92,9 +97,12 @@ void do_track(int fd) {
 }
 
 void do_trigger() {
-    assert (g_tracking_mode == NOT_TRIGGERED);
+    AutoLock lock(&g_mutex);
     struct rlimit limit;
     int ret = getrlimit(RLIMIT_NOFILE, &limit);
+    if (g_tracking_mode != NOT_TRIGGERED) {
+        return;
+    };
     if (ret) {
         ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);
         g_tracking_mode = DISABLED;
@@ -127,7 +135,10 @@ bool dump_trace(void * key, void * value, void * context) {
 
 void do_report() {
     ALOGE("FD_TRACKER: ****** dump begin ******");
+
+    AutoLock lock(&g_mutex);
     hashmapForEach(g_hash_map, dump_trace, NULL);
+    
     ALOGE("FD_TRACKER: ****** dump end ******");
 }
 
