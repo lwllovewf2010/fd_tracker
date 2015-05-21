@@ -14,6 +14,7 @@ pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // FIXME: what if setrlimit or prlimit is invoked ?
 // FIXME: consider std::atomic for performance ?
+// FIXME: sort traces with count
 
 __attribute__((constructor))
 void setup() {
