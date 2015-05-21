@@ -142,6 +142,27 @@ void do_report() {
     ALOGE("FD_TRACKER: ****** dump end ******");
 }
 
+#define TRACK_ARRAY(name,array,...)                          \
+    do {                                                        \
+        int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
+        int orig_errno = errno;                                 \
+        if (ret == -1 && orig_errno == EMFILE) {                \
+            if (g_tracking_mode == NOT_TRIGGERED) {             \
+                do_trigger();                                   \
+                ret = (*g_entry_points.p_##name)(__VA_ARGS__);  \
+            } else if (g_tracking_mode == TRIGGERED) {          \
+                do_report();                                    \
+            }                                                   \
+            errno = orig_errno;                                 \
+        } else {                                                \
+            if (g_tracking_mode == TRIGGERED) {                 \
+                do_track(array[0]);                             \
+                do_track(array[1]);                             \
+            }                                                   \
+        }                                                       \
+        return ret;                                             \
+    } while (0)                                                 \
+
 #define TRACK(name,...)                                         \
     do {                                                        \
         int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
@@ -202,7 +223,7 @@ extern "C" {
     }
     
     int socketpair(int domain, int type, int protocol, int sv[2]) {
-        TRACK(socketpair, domain, type, protocol, sv);
+        TRACK_ARRAY(socketpair, sv, domain, type, protocol, sv);
     }
     
     int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
@@ -222,7 +243,7 @@ extern "C" {
     }
     
     int pipe (int fd[2]) {
-        TRACK(pipe, fd);
+        TRACK_ARRAY(pipe, fd, fd);
     }
     
     int pipe2 (int fd[2], int flags) {
