@@ -29,18 +29,11 @@ enum tracking_mode {
     TRIGGERED,
 };
 
-struct tracking_info {
-    int fd;
-    time_t time;
-    char* md5;
-  
-};
-
-struct trace_info {
+typedef struct trace_info_ {
     int count;
     char* native_stack_trace;
     char* java_stack_trace;  
-};
+} trace_info;
 
 int str_hash(void *key);
 bool str_equals(void *key_a, void *key_b);

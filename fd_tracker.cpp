@@ -4,10 +4,12 @@
 #include <thread.h>
 #include <cutils/hashmap.h>
 
+#define TRACK_THRESHHOLD 0.8
 volatile tracking_mode g_tracking_mode = DISABLED;
-struct tracking_info** g_tracking_info = NULL;
+
 int g_rlimit_nofile = -1;
-Hashmap * g_trace_hash_map;
+char** g_hash_array = NULL;
+Hashmap * g_hash_map;
 
 __attribute__((constructor))
 void setup() {
@@ -33,17 +35,19 @@ void setup() {
     }
 
     g_rlimit_nofile = limit.rlim_cur;
-    g_tracking_info = (struct tracking_info**) malloc(sizeof(struct tracking_info*) * (limit.rlim_cur));
-    bzero(g_tracking_info, sizeof(struct tracking_info*) * limit.rlim_cur);
+    g_hash_array = (char**) malloc(sizeof(char*) * (g_rlimit_nofile));
+    bzero(g_hash_array, sizeof(char*) * g_rlimit_nofile);
+
+    assert(TRACK_THRESHHOLD > 0 && TRACK_THRESHHOLD < 1);
     
-    limit.rlim_cur = (rlim_t) (limit.rlim_cur * 0.8);
+    limit.rlim_cur = (rlim_t) (g_rlimit_nofile * TRACK_THRESHHOLD);
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
         ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
         return;
     }
     g_tracking_mode = NOT_TRIGGERED;
-    g_trace_hash_map = hashmapCreate(g_rlimit_nofile, str_hash, str_equals);
+    g_hash_map = hashmapCreate(g_rlimit_nofile, str_hash, str_equals);
 }
 
 void do_track(int fd) {
@@ -57,7 +61,7 @@ void do_track(int fd) {
     struct rlimit limit;
     int ret = getrlimit(RLIMIT_NOFILE, &limit);
     int orig_limit = limit.rlim_cur;
-    limit.rlim_cur = orig_limit+50;
+    limit.rlim_cur = orig_limit + 1;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     
     android::CallStack stack;
@@ -70,24 +74,21 @@ void do_track(int fd) {
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     
 
-    assert(g_tracking_info[fd] == NULL);
+    assert(g_hash_array[fd] == NULL);
 
-    struct tracking_info * info = (struct tracking_info *) malloc(sizeof(struct tracking_info));
-    info->fd = fd;
-    info->time = time(0);
-    info->md5 = md5((char*)stack.toString("").string(), (char*)java_stack.str().c_str());
+    char* md5_sum = md5((char*)stack.toString("").string(), (char*)java_stack.str().c_str());
 
-    struct trace_info * tmp_trace_info = (struct trace_info *) hashmapGet(g_trace_hash_map,info->md5);
-    if (tmp_trace_info == NULL) {
-        tmp_trace_info = (struct trace_info *) malloc(sizeof(struct trace_info));
-        tmp_trace_info->count = 1;
-        tmp_trace_info->native_stack_trace = strdup(stack.toString("").string());
-        tmp_trace_info->java_stack_trace = strdup(java_stack.str().c_str());
-        hashmapPut(g_trace_hash_map, info->md5, tmp_trace_info);
+    trace_info * _trace_info = (trace_info *) hashmapGet(g_hash_map,md5_sum);
+    if (_trace_info == NULL) {
+        _trace_info = (trace_info *) malloc(sizeof(trace_info));
+        _trace_info->count = 1;
+        _trace_info->native_stack_trace = strdup(stack.toString("").string());
+        _trace_info->java_stack_trace = strdup(java_stack.str().c_str());
+        hashmapPut(g_hash_map, md5_sum, _trace_info);
     } else {
-        tmp_trace_info->count++;
+        _trace_info->count++;
     }
-    g_tracking_info[fd] = info;
+    g_hash_array[fd] = md5_sum;
 }
 
 void do_trigger() {
@@ -116,32 +117,17 @@ void do_trigger() {
 }
 
 bool dump_trace(void * key, void * value, void * context) {
-    struct trace_info * tmp_trace_info = (struct trace_info *) value;
+    trace_info * _trace_info = (trace_info *) value;
     ALOGE("FD_TRACKER: ------ dump trace ------");
-    ALOGE("FD_TRACKER: count: %d", tmp_trace_info->count);
-    ALOGE("FD_TRACKER: java trace:\n%s", tmp_trace_info->java_stack_trace);
-    ALOGE("FD_TRACKER: native trace:\n%s", tmp_trace_info->native_stack_trace);
+    ALOGE("FD_TRACKER: count: %d", _trace_info->count);
+    ALOGE("FD_TRACKER: java trace:\n%s", _trace_info->java_stack_trace);
+    ALOGE("FD_TRACKER: native trace:\n%s", _trace_info->native_stack_trace);
     return true;
 }
 
 void do_report() {
     ALOGE("FD_TRACKER: ****** dump begin ******");
-    // assert(g_tracking_mode == TRIGGERED);
-    // struct tracking_info * info = NULL;
-    // for (int i = 0; i<g_rlimit_nofile; ++i) {
-    //     info = g_tracking_info[i];
-    //     if (info == NULL) {
-    //         continue;
-    //     }
-    //     ALOGE("FD_TRACKER: ------ dumping for fd: %d ------", info->fd);
-    //     struct trace_info * tmp_trace_info = (struct trace_info *) hashmapGet(g_trace_hash_map, info->md5);
-    //     assert(tmp_trace_info->count > 0);
-    //     ALOGE("FD_TRACKER: count: %d", tmp_trace_info->count);
-    //     ALOGE("FD_TRACKER: java stack:\n%s", tmp_trace_info->java_stack_trace);
-    //     ALOGE("FD_TRACKER: native stack:\n%s", tmp_trace_info->native_stack_trace);
-    // }
-
-    hashmapForEach(g_trace_hash_map, dump_trace, NULL);
+    hashmapForEach(g_hash_map, dump_trace, NULL);
     ALOGE("FD_TRACKER: ****** dump end ******");
 }
 
@@ -174,22 +160,21 @@ extern "C" {
         if (fd < 0 || fd >= g_rlimit_nofile) {
             return ret;
         }
-        if (g_tracking_info[fd] != NULL) {
-            char * md5 = g_tracking_info[fd]->md5;
-            assert(md5 != NULL);
-            struct trace_info * tmp_trace_info = (struct trace_info *) hashmapGet(g_trace_hash_map, md5);
-            if (tmp_trace_info != NULL) {
-                tmp_trace_info->count--;
+        if (g_hash_array[fd] != NULL) {
+            char * md5_sum = g_hash_array[fd];
+            assert(md5_sum != NULL);
+            trace_info * _trace_info = (trace_info *) hashmapGet(g_hash_map, md5_sum);
+            if (_trace_info != NULL) {
+                _trace_info->count--;
             }
-            if (tmp_trace_info->count <= 0) {
-                free(tmp_trace_info->native_stack_trace);
-                free(tmp_trace_info->java_stack_trace);
-                hashmapRemove(g_trace_hash_map, md5);
+            if (_trace_info->count <= 0) {
+                free(_trace_info->native_stack_trace);
+                free(_trace_info->java_stack_trace);
+                hashmapRemove(g_hash_map, md5_sum);
             }
             
-            free(g_tracking_info[fd]->md5);
-            free(g_tracking_info[fd]);
-            g_tracking_info[fd] = NULL;
+            free(g_hash_array[fd]);
+            g_hash_array[fd] = NULL;
         } 
         return ret;
     }
