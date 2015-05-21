@@ -142,28 +142,21 @@ void do_report() {
     ALOGE("FD_TRACKER: ****** dump end ******");
 }
 
-#define TRACK_ARRAY(name,array,...)                          \
-    do {                                                        \
-        int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
-        int orig_errno = errno;                                 \
-        if (ret == -1 && orig_errno == EMFILE) {                \
-            if (g_tracking_mode == NOT_TRIGGERED) {             \
-                do_trigger();                                   \
-                ret = (*g_entry_points.p_##name)(__VA_ARGS__);  \
-            } else if (g_tracking_mode == TRIGGERED) {          \
-                do_report();                                    \
-            }                                                   \
-            errno = orig_errno;                                 \
-        } else {                                                \
-            if (g_tracking_mode == TRIGGERED) {                 \
-                do_track(array[0]);                             \
-                do_track(array[1]);                             \
-            }                                                   \
-        }                                                       \
-        return ret;                                             \
-    } while (0)                                                 \
+#define DO_TRACK                                                \
+    do_track(ret)                                               \
 
-#define TRACK(name,...)                                         \
+#define DO_TRACK_ARRAY                                \
+    do_track(array[0]);                               \
+    do_track(array[1]);                               \
+
+#define TRACK_RET(name,...)                    \
+    TRACK(DO_TRACK, name, __VA_ARGS__)         \
+
+#define TRACK_ARRAY(name,...)                    \
+    TRACK(DO_TRACK_ARRAY, name, __VA_ARGS__)      \
+
+
+#define TRACK(DO_TRACK,name,...)                                \
     do {                                                        \
         int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
         int orig_errno = errno;                                 \
@@ -177,7 +170,7 @@ void do_report() {
             errno = orig_errno;                                 \
         } else {                                                \
             if (g_tracking_mode == TRIGGERED) {                 \
-                do_track(ret);                                  \
+                DO_TRACK;                                       \
             }                                                   \
         }                                                       \
         return ret;                                             \
@@ -212,46 +205,45 @@ extern "C" {
     }
 
     int open(const char *pathname, int flags) {
-        TRACK(open, pathname, flags);
+        TRACK_RET(open, pathname, flags);
     }
 
     // opendir/closedir is not tracked, since they are implemented
     // using open/close
 
     int socket(int domain, int type, int protocol) {
-        TRACK (socket, domain, type, protocol);
+        TRACK_RET (socket, domain, type, protocol);
     }
     
-    int socketpair(int domain, int type, int protocol, int sv[2]) {
-        TRACK_ARRAY(socketpair, sv, domain, type, protocol, sv);
+    int socketpair(int domain, int type, int protocol, int array[2]) {
+        TRACK_ARRAY(socketpair, domain, type, protocol, array);
     }
     
     int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
-        TRACK (accept, sockfd, addr, addrlen);
+        TRACK_RET (accept, sockfd, addr, addrlen);
     }
 
     int dup(int oldfd) {
-        TRACK(dup, oldfd);
+        TRACK_RET(dup, oldfd);
     }
 
     int dup2 (int oldfd, int newfd) {
-        TRACK(dup2, oldfd, newfd);
+        TRACK_RET(dup2, oldfd, newfd);
     }
 
     int dup3 (int oldfd, int newfd, int flag) {
-        TRACK(dup3, oldfd, newfd, flag);
+        TRACK_RET(dup3, oldfd, newfd, flag);
     }
     
-    int pipe (int fd[2]) {
-        TRACK_ARRAY(pipe, fd, fd);
+    int pipe (int array[2]) {
+        TRACK_ARRAY(pipe, array);
     }
     
     int pipe2 (int fd[2], int flags) {
-        TRACK(pipe2, fd, flags);
+        TRACK_RET(pipe2, fd, flags);
     }
 
     int creat(const char *path, mode_t mod) {
-        TRACK(creat, path, mod);
+        TRACK_RET(creat, path, mod);
     }
-
 }
