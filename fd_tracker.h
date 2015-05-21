@@ -56,4 +56,41 @@ private:
     pthread_mutex_t * m_mutex;
 };
 
+#define DO_TRACK                                \
+    do {                                        \
+        do_track(ret);                          \
+    } while (0)                                 \
+
+#define DO_TRACK_ARRAY                          \
+    do {                                        \
+        do_track(array[0]);                     \
+        do_track(array[1]);                     \
+    } while (0)                                 \
+
+#define TRACK_RET(name,...)                     \
+    TRACK(DO_TRACK, name, __VA_ARGS__)          \
+
+#define TRACK_ARRAY(name,...)                   \
+    TRACK(DO_TRACK_ARRAY, name, __VA_ARGS__)    \
+
+#define TRACK(DO_TRACK,name,...)                                \
+    do {                                                        \
+        int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
+        int orig_errno = errno;                                 \
+        if (ret == -1 && orig_errno == EMFILE) {                 \
+            if (g_tracking_mode == NOT_TRIGGERED) {             \
+                do_trigger();                                   \
+                ret = (*g_entry_points.p_##name)(__VA_ARGS__);  \
+            } else if (g_tracking_mode == TRIGGERED) {          \
+                do_report();                                    \
+            }                                                   \
+            errno = orig_errno;                                 \
+        } else {                                                \
+            if (g_tracking_mode == TRIGGERED) {                 \
+                DO_TRACK;                                       \
+            }                                                   \
+        }                                                       \
+        return ret;                                             \
+    } while (0)                                                 \
+        
 #endif  // FD_TRACKER_H

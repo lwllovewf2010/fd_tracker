@@ -12,6 +12,9 @@ char** g_hash_array = NULL;
 Hashmap * g_hash_map;
 pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// FIXME: what if setrlimit or prlimit is invoked ?
+// FIXME: consider std::atomic for performance ?
+
 __attribute__((constructor))
 void setup() {
 #define ENTRYPOINT_ENUM(name, rettype, ...)                             \
@@ -132,49 +135,13 @@ bool dump_trace(void * key, void * value, void * context) {
     ALOGE("FD_TRACKER: native trace:\n%s", _trace_info->native_stack_trace);
     return true;
 }
-
-void do_report() {
-    ALOGE("FD_TRACKER: ****** dump begin ******");
-
-    AutoLock lock(&g_mutex);
-    hashmapForEach(g_hash_map, dump_trace, NULL);
     
+void do_report() {
+    AutoLock lock(&g_mutex);
+    ALOGE("FD_TRACKER: ****** dump begin ******");
+    hashmapForEach(g_hash_map, dump_trace, NULL);
     ALOGE("FD_TRACKER: ****** dump end ******");
 }
-
-#define DO_TRACK                                                \
-    do_track(ret)                                               \
-
-#define DO_TRACK_ARRAY                                \
-    do_track(array[0]);                               \
-    do_track(array[1]);                               \
-
-#define TRACK_RET(name,...)                    \
-    TRACK(DO_TRACK, name, __VA_ARGS__)         \
-
-#define TRACK_ARRAY(name,...)                    \
-    TRACK(DO_TRACK_ARRAY, name, __VA_ARGS__)      \
-
-
-#define TRACK(DO_TRACK,name,...)                                \
-    do {                                                        \
-        int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
-        int orig_errno = errno;                                 \
-        if (ret == -1 && orig_errno == EMFILE) {                 \
-            if (g_tracking_mode == NOT_TRIGGERED) {             \
-                do_trigger();                                   \
-                ret = (*g_entry_points.p_##name)(__VA_ARGS__);  \
-            } else if (g_tracking_mode == TRIGGERED) {          \
-                do_report();                                    \
-            }                                                   \
-            errno = orig_errno;                                 \
-        } else {                                                \
-            if (g_tracking_mode == TRIGGERED) {                 \
-                DO_TRACK;                                       \
-            }                                                   \
-        }                                                       \
-        return ret;                                             \
-    } while (0)                                                 \
 
 extern "C" {
     int close(int fd) {
