@@ -33,7 +33,7 @@ enum tracking_mode {
 typedef struct trace_info_ {
     int count;
     char* native_stack_trace;
-    char* java_stack_trace;  
+    char* java_stack_trace;
 } trace_info;
 
 int pred_str_hash(void *key);
@@ -58,7 +58,7 @@ private:
     pthread_mutex_t * m_mutex;
 };
 
-#define DO_TRACK_RET                                \
+#define DO_TRACK_RET                            \
     do {                                        \
         do_track(ret);                          \
     } while (0)                                 \
@@ -70,7 +70,7 @@ private:
     } while (0)                                 \
 
 #define TRACK_RET(name,...)                     \
-    TRACK(DO_TRACK_RET, name, __VA_ARGS__)          \
+    TRACK(DO_TRACK_RET, name, __VA_ARGS__)      \
 
 #define TRACK_ARRAY(name,...)                   \
     TRACK(DO_TRACK_ARRAY, name, __VA_ARGS__)    \
@@ -96,17 +96,18 @@ private:
     } while (0)                                                 \
 
 #define GET_RLIMIT(LIMIT)                                               \
-    struct rlimit LIMIT;                                                \
-    int ret = getrlimit(RLIMIT_NOFILE, &limit);                         \
-    if (ret) {                                                          \
-        ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);        \
-        g_tracking_mode = DISABLED;                                     \
-        return;                                                         \
-    }                                                                   \
-    if (limit.rlim_cur == RLIM_INFINITY) {                              \
-        ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker");  \
-        g_tracking_mode = DISABLED;                                     \
-        return;                                                         \
-    }                                                                   \
-    
+    do {                                                                \
+        int ret = getrlimit(RLIMIT_NOFILE, &LIMIT);                     \
+        if (ret) {                                                      \
+            ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);    \
+            g_tracking_mode = DISABLED;                                 \
+            return;                                                     \
+        }                                                               \
+        if (LIMIT.rlim_cur == RLIM_INFINITY) {                          \
+            ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker"); \
+            g_tracking_mode = DISABLED;                                 \
+            return;                                                     \
+        }                                                               \
+    } while (0)                                                         \
+
 #endif  // FD_TRACKER_H

@@ -31,21 +31,23 @@ void setup() {
 #undef ENTRYPOINT_LIST
 #undef ENTRYPOINT_ENUM
 
+    struct rlimit limit;
     GET_RLIMIT(limit);
 
     g_rlimit_nofile = limit.rlim_cur;
-    g_hash_array = (char**) malloc(sizeof(char*) * (g_rlimit_nofile));
-    bzero(g_hash_array, sizeof(char*) * g_rlimit_nofile);
 
     assert(TRACK_THRESHHOLD > 0 && TRACK_THRESHHOLD < 1);
-    
+
     limit.rlim_cur = (rlim_t) (g_rlimit_nofile * TRACK_THRESHHOLD);
-    ret = setrlimit(RLIMIT_NOFILE, &limit);
+    int ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
         ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
         return;
     }
     g_tracking_mode = NOT_TRIGGERED;
+
+    g_hash_array = (char**) malloc(sizeof(char*) * (g_rlimit_nofile));
+    bzero(g_hash_array, sizeof(char*) * g_rlimit_nofile);
     g_hash_map = hashmapCreate(g_rlimit_nofile, pred_str_hash, pred_str_equals);
 }
 
@@ -59,13 +61,14 @@ void do_track(int fd) {
         ALOGE("FD_TRACKER: fd: %d exceed rlimit: %d?", fd, g_rlimit_nofile);
         return;
     }
-    
+
+    struct rlimit limit;
     GET_RLIMIT(limit);
 
     int orig_limit = limit.rlim_cur;
     limit.rlim_cur = orig_limit + 1;
-    ret = setrlimit(RLIMIT_NOFILE, &limit);
-    
+    int ret = setrlimit(RLIMIT_NOFILE, &limit);
+
     android::CallStack stack;
     stack.update(4);
 
@@ -74,7 +77,7 @@ void do_track(int fd) {
 
     limit.rlim_cur = orig_limit;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
-    
+
     assert(g_hash_array[fd] == NULL);
 
     char* md5_sum = md5((char*)stack.toString("").string(), (char*)java_stack.str().c_str());
@@ -97,14 +100,17 @@ void do_trigger() {
     if (g_tracking_mode != NOT_TRIGGERED) {
         return;
     };
+
+    struct rlimit limit;
     GET_RLIMIT(limit);
-    if (g_rlimit_nofile <= limit.rlim_cur) {
+
+    if (limit.rlim_cur != (rlim_t) (g_rlimit_nofile * TRACK_THRESHHOLD)) {
         ALOGE("FD_TRACKER: RLIMIT seems changed outside, DISABLE");
         g_tracking_mode = DISABLED;
         return;
     }
     limit.rlim_cur = (rlim_t) (g_rlimit_nofile);
-    ret = setrlimit(RLIMIT_NOFILE, &limit);
+    int ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
         ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
         g_tracking_mode = DISABLED;
@@ -118,7 +124,7 @@ void do_report() {
     AutoLock lock(&g_mutex);
     ALOGE("FD_TRACKER: ****** dump begin ******");
     // hashmapForEach(g_hash_map, dump_trace, NULL);
-    
+
     int hash_size = hashmapSize(g_hash_map);
     trace_info * traces [hash_size];
     bzero(traces, sizeof (trace_info *) * hash_size);
@@ -149,7 +155,7 @@ extern "C" {
         if (fd < 0 || fd >= g_rlimit_nofile) {
             return ret;
         }
-        
+
         {
             AutoLock lock(&g_mutex);
             if (g_tracking_mode != TRIGGERED) {
@@ -167,7 +173,7 @@ extern "C" {
                     free(_trace_info->java_stack_trace);
                     hashmapRemove(g_hash_map, md5_sum);
                 }
-            
+
                 free(g_hash_array[fd]);
                 g_hash_array[fd] = NULL;
             }
@@ -185,11 +191,11 @@ extern "C" {
     int socket(int domain, int type, int protocol) {
         TRACK_RET (socket, domain, type, protocol);
     }
-    
+
     int socketpair(int domain, int type, int protocol, int array[2]) {
         TRACK_ARRAY(socketpair, domain, type, protocol, array);
     }
-    
+
     int accept(int sockfd, struct sockaddr *addr, socklen_t *addrlen) {
         TRACK_RET (accept, sockfd, addr, addrlen);
     }
@@ -205,11 +211,11 @@ extern "C" {
     int dup3 (int oldfd, int newfd, int flag) {
         TRACK_RET(dup3, oldfd, newfd, flag);
     }
-    
+
     int pipe (int array[2]) {
         TRACK_ARRAY(pipe, array);
     }
-    
+
     int pipe2 (int fd[2], int flags) {
         TRACK_RET(pipe2, fd, flags);
     }
