@@ -3,6 +3,7 @@
 #include <strings.h>
 #include <runtime.h>
 #include <cutils/hashmap.h>
+#include <stdlib.h>
 
 #define TRACK_THRESHHOLD 0.8
 volatile tracking_mode g_tracking_mode = DISABLED;
@@ -11,10 +12,10 @@ int g_rlimit_nofile = -1;
 char** g_hash_array = NULL;
 Hashmap * g_hash_map = NULL;
 pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
+struct entry_points g_entry_points;
 
 // FIXME: what if setrlimit or prlimit is invoked ?
 // FIXME: consider std::atomic for performance ?
-// FIXME: sort traces with count
 
 __attribute__((constructor))
 void setup() {
@@ -127,19 +128,28 @@ void do_trigger() {
     g_tracking_mode = TRIGGERED;
 }
 
-bool dump_trace(void * key, void * value, void * context) {
-    trace_info * _trace_info = (trace_info *) value;
-    ALOGE("FD_TRACKER: ------ dump trace ------");
-    ALOGE("FD_TRACKER: count: %d", _trace_info->count);
-    ALOGE("FD_TRACKER: java trace:\n%s", _trace_info->java_stack_trace);
-    ALOGE("FD_TRACKER: native trace:\n%s", _trace_info->native_stack_trace);
-    return true;
-}
-    
 void do_report() {
     AutoLock lock(&g_mutex);
     ALOGE("FD_TRACKER: ****** dump begin ******");
-    hashmapForEach(g_hash_map, dump_trace, NULL);
+    // hashmapForEach(g_hash_map, dump_trace, NULL);
+    
+    int hash_size = hashmapSize(g_hash_map);
+    trace_info * traces [hash_size];
+    bzero(traces, sizeof (trace_info *) * hash_size);
+
+    int context [2] = {(int)traces, 0};
+    hashmapForEach(g_hash_map, collect_map_value, (void *) context);
+
+    qsort(traces, hash_size, sizeof(trace_info *), sort_trace);
+
+    for (int i = 0; i < hash_size; i++) {
+        trace_info * _trace_info = traces[i];
+        ALOGE("FD_TRACKER: ------ dump trace ------");
+        ALOGE("FD_TRACKER: count: %d", _trace_info->count);
+        ALOGE("FD_TRACKER: java trace:\n%s", _trace_info->java_stack_trace);
+        ALOGE("FD_TRACKER: native trace:\n%s", _trace_info->native_stack_trace);
+    }
+
     ALOGE("FD_TRACKER: ****** dump end ******");
     g_tracking_mode = DISABLED;
 }

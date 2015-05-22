@@ -1,3 +1,4 @@
+#include "fd_tracker.h"
 #include <cutils/hashmap.h>
 #include<openssl/md5.h>
 #include <stdio.h>
@@ -30,4 +31,16 @@ char* md5 (char * data, char * data2) {
         strcat(ret,tmp);
     }
     return ret;
+}
+
+bool collect_map_value (void * key, void * value, void * context) {
+    trace_info ** traces = (trace_info **) *((int *)context);
+    int * offset = (int *)((int *) context + 1);
+    traces[*offset] = (trace_info *) value;
+    *offset = *offset + 1;
+    return true;
+}
+
+int sort_trace(const void * t1, const void * t2) {
+    return (*(trace_info **)t2)->count - (*(trace_info **)t1)->count;
 }

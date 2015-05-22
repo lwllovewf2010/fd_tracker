@@ -22,7 +22,7 @@ struct entry_points {
 
 #undef ENTRYPOINT_LIST
 #undef ENTRYPOINT_ENUM
-} g_entry_points;
+};
 
 enum tracking_mode {
     DISABLED,
@@ -38,6 +38,9 @@ typedef struct trace_info_ {
 
 int str_hash(void *key);
 bool str_equals(void *key_a, void *key_b);
+
+int sort_trace(const void * t1, const void * t2);
+bool collect_map_value (void * key, void * value, void * context);
 
 char* md5 (char * data, char * data2);
 
