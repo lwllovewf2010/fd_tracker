@@ -56,7 +56,7 @@ private:
     pthread_mutex_t * m_mutex;
 };
 
-#define DO_TRACK                                \
+#define DO_TRACK_RET                                \
     do {                                        \
         do_track(ret);                          \
     } while (0)                                 \
@@ -68,7 +68,7 @@ private:
     } while (0)                                 \
 
 #define TRACK_RET(name,...)                     \
-    TRACK(DO_TRACK, name, __VA_ARGS__)          \
+    TRACK(DO_TRACK_RET, name, __VA_ARGS__)          \
 
 #define TRACK_ARRAY(name,...)                   \
     TRACK(DO_TRACK_ARRAY, name, __VA_ARGS__)    \

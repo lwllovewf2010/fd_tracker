@@ -9,7 +9,7 @@ volatile tracking_mode g_tracking_mode = DISABLED;
 
 int g_rlimit_nofile = -1;
 char** g_hash_array = NULL;
-Hashmap * g_hash_map;
+Hashmap * g_hash_map = NULL;
 pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 // FIXME: what if setrlimit or prlimit is invoked ?
@@ -60,7 +60,6 @@ void do_track(int fd) {
     if (g_tracking_mode != TRIGGERED) {
         return;
     };
-    assert(g_tracking_mode = TRIGGERED);
     assert(fd >= 0);
     if (fd >= g_rlimit_nofile) {
         ALOGE("FD_TRACKER: fd: %d exceed rlimit: %d?", fd, g_rlimit_nofile);
@@ -102,11 +101,11 @@ void do_track(int fd) {
 
 void do_trigger() {
     AutoLock lock(&g_mutex);
-    struct rlimit limit;
-    int ret = getrlimit(RLIMIT_NOFILE, &limit);
     if (g_tracking_mode != NOT_TRIGGERED) {
         return;
     };
+    struct rlimit limit;
+    int ret = getrlimit(RLIMIT_NOFILE, &limit);
     if (ret) {
         ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);
         g_tracking_mode = DISABLED;
@@ -154,22 +153,29 @@ extern "C" {
         if (fd < 0 || fd >= g_rlimit_nofile) {
             return ret;
         }
-        if (g_hash_array[fd] != NULL) {
-            char * md5_sum = g_hash_array[fd];
-            assert(md5_sum != NULL);
-            trace_info * _trace_info = (trace_info *) hashmapGet(g_hash_map, md5_sum);
-            if (_trace_info != NULL) {
-                _trace_info->count--;
+        
+        {
+            AutoLock lock(&g_mutex);
+            if (g_tracking_mode != TRIGGERED) {
+                return ret;
             }
-            if (_trace_info->count <= 0) {
-                free(_trace_info->native_stack_trace);
-                free(_trace_info->java_stack_trace);
-                hashmapRemove(g_hash_map, md5_sum);
-            }
+            if (g_hash_array[fd] != NULL) {
+                char * md5_sum = g_hash_array[fd];
+                assert(md5_sum != NULL);
+                trace_info * _trace_info = (trace_info *) hashmapGet(g_hash_map, md5_sum);
+                if (_trace_info != NULL) {
+                    _trace_info->count--;
+                }
+                if (_trace_info->count <= 0) {
+                    free(_trace_info->native_stack_trace);
+                    free(_trace_info->java_stack_trace);
+                    hashmapRemove(g_hash_map, md5_sum);
+                }
             
-            free(g_hash_array[fd]);
-            g_hash_array[fd] = NULL;
-        } 
+                free(g_hash_array[fd]);
+                g_hash_array[fd] = NULL;
+            }
+        }
         return ret;
     }
 
