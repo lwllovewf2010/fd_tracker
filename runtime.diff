@@ -1,0 +1,39 @@
+8b1964f2ce6c4e3032c3bed84392a7af1944f164 HEAD 9.24
+Author: wei.sun <wei.sun@spreadtrum.com>
+Date:   Fri May 22 11:45:30 2015 +0800
+
+    nil
+
+2 files changed, 6 insertions(+)
+ runtime/runtime.cc |    4 ++++
+ runtime/runtime.h  |    2 ++
+
+	Modified   runtime/runtime.cc
+diff --git a/runtime/runtime.cc b/runtime/runtime.cc
+index bcb9e0c..007ac52 100644
+--- a/runtime/runtime.cc
++++ b/runtime/runtime.cc
+@@ -1440,4 +1440,8 @@ void Runtime::AddCurrentRuntimeFeaturesAsDex2OatArguments(std::vector<std::strin
+ void Runtime::UpdateProfilerState(int state) {
+   VLOG(profiler) << "Profiler state updated to " << state;
+ }
++
++void Runtime::DumpJavaStack(std::ostream& os) {
++  Thread::Current()->DumpJavaStack(os);
++}
+ }  // namespace art
+	Modified   runtime/runtime.h
+diff --git a/runtime/runtime.h b/runtime/runtime.h
+index 8cfa8aa..4dca4fb 100644
+--- a/runtime/runtime.h
++++ b/runtime/runtime.h
+@@ -484,6 +484,8 @@ class Runtime {
+   static const char* GetDefaultInstructionSetFeatures() {
+     return kDefaultInstructionSetFeatures;
+   }
++    
++  static void DumpJavaStack(std::ostream& os);
+ 
+  private:
+   static void InitPlatformSignalHandlers();
+

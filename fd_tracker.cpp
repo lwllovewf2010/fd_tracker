@@ -1,7 +1,7 @@
 #include "fd_tracker.h"
 #include <assert.h>
 #include <strings.h>
-#include <thread.h>
+#include <runtime.h>
 #include <cutils/hashmap.h>
 
 #define TRACK_THRESHHOLD 0.8
@@ -76,7 +76,7 @@ void do_track(int fd) {
     stack.update(4);
 
     std::ostringstream java_stack;
-    art::dump_java_stack(java_stack);
+    art::Runtime::DumpJavaStack(java_stack);
 
     limit.rlim_cur = orig_limit;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
