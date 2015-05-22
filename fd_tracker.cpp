@@ -31,16 +31,7 @@ void setup() {
 #undef ENTRYPOINT_LIST
 #undef ENTRYPOINT_ENUM
 
-    struct rlimit limit;
-    int ret = getrlimit(RLIMIT_NOFILE, &limit);
-    if (ret) {
-        ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);
-        return;
-    }
-    if (limit.rlim_cur == RLIM_INFINITY) {
-        ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker");
-        return;
-    }
+    GET_RLIMIT(limit);
 
     g_rlimit_nofile = limit.rlim_cur;
     g_hash_array = (char**) malloc(sizeof(char*) * (g_rlimit_nofile));
@@ -69,8 +60,8 @@ void do_track(int fd) {
         return;
     }
     
-    struct rlimit limit;
-    int ret = getrlimit(RLIMIT_NOFILE, &limit);
+    GET_RLIMIT(limit);
+
     int orig_limit = limit.rlim_cur;
     limit.rlim_cur = orig_limit + 1;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
@@ -84,7 +75,6 @@ void do_track(int fd) {
     limit.rlim_cur = orig_limit;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     
-
     assert(g_hash_array[fd] == NULL);
 
     char* md5_sum = md5((char*)stack.toString("").string(), (char*)java_stack.str().c_str());
@@ -107,15 +97,9 @@ void do_trigger() {
     if (g_tracking_mode != NOT_TRIGGERED) {
         return;
     };
-    struct rlimit limit;
-    int ret = getrlimit(RLIMIT_NOFILE, &limit);
-    if (ret) {
-        ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);
-        g_tracking_mode = DISABLED;
-        return;
-    }
-    if (limit.rlim_cur == RLIM_INFINITY) {
-        ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker");
+    GET_RLIMIT(limit);
+    if (g_rlimit_nofile <= limit.rlim_cur) {
+        ALOGE("FD_TRACKER: RLIMIT seems changed outside, DISABLE");
         g_tracking_mode = DISABLED;
         return;
     }

@@ -94,5 +94,19 @@ private:
         }                                                       \
         return ret;                                             \
     } while (0)                                                 \
-        
+
+#define GET_RLIMIT(LIMIT)                                               \
+    struct rlimit LIMIT;                                                \
+    int ret = getrlimit(RLIMIT_NOFILE, &limit);                         \
+    if (ret) {                                                          \
+        ALOGE("FD_TRACKER: getrlimit failed, errno: %d", errno);        \
+        g_tracking_mode = DISABLED;                                     \
+        return;                                                         \
+    }                                                                   \
+    if (limit.rlim_cur == RLIM_INFINITY) {                              \
+        ALOGE("FD_TRACKER: RLIM_NOFILE is INFINITY, skip fd_tracker");  \
+        g_tracking_mode = DISABLED;                                     \
+        return;                                                         \
+    }                                                                   \
+    
 #endif  // FD_TRACKER_H
