@@ -3,11 +3,11 @@
 #include<openssl/md5.h>
 #include <stdio.h>
 
-int str_hash(void *key) {
+int pred_str_hash(void *key) {
     return hashmapHash(key, strlen((char*)key));
 }
 
-bool str_equals(void *key_a, void *key_b) {
+bool pred_str_equals(void *key_a, void *key_b) {
     return strcmp((char*)key_a, (char*)key_b) == 0;
 }
 
@@ -33,7 +33,7 @@ char* md5 (char * data, char * data2) {
     return ret;
 }
 
-bool collect_map_value (void * key, void * value, void * context) {
+bool pred_collect_map_value (void * key, void * value, void * context) {
     trace_info ** traces = (trace_info **) *((int *)context);
     int * offset = (int *)((int *) context + 1);
     traces[*offset] = (trace_info *) value;
@@ -41,6 +41,6 @@ bool collect_map_value (void * key, void * value, void * context) {
     return true;
 }
 
-int sort_trace(const void * t1, const void * t2) {
+int pred_sort_trace(const void * t1, const void * t2) {
     return (*(trace_info **)t2)->count - (*(trace_info **)t1)->count;
 }

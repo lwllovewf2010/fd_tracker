@@ -53,7 +53,7 @@ void setup() {
         return;
     }
     g_tracking_mode = NOT_TRIGGERED;
-    g_hash_map = hashmapCreate(g_rlimit_nofile, str_hash, str_equals);
+    g_hash_map = hashmapCreate(g_rlimit_nofile, pred_str_hash, pred_str_equals);
 }
 
 void do_track(int fd) {
@@ -138,9 +138,9 @@ void do_report() {
     bzero(traces, sizeof (trace_info *) * hash_size);
 
     int context [2] = {(int)traces, 0};
-    hashmapForEach(g_hash_map, collect_map_value, (void *) context);
+    hashmapForEach(g_hash_map, pred_collect_map_value, (void *) context);
 
-    qsort(traces, hash_size, sizeof(trace_info *), sort_trace);
+    qsort(traces, hash_size, sizeof(trace_info *), pred_sort_trace);
 
     for (int i = 0; i < hash_size; i++) {
         trace_info * _trace_info = traces[i];
