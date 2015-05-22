@@ -16,6 +16,8 @@ struct entry_points g_entry_points;
 
 // FIXME: what if setrlimit or prlimit is invoked ?
 // FIXME: consider std::atomic for performance ?
+// FIXME: hard/soft rlimit
+// FIXME: doesn't work for setuid/setgid
 
 __attribute__((constructor))
 void setup() {
