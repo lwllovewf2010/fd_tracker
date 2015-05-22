@@ -147,7 +147,7 @@ void do_report() {
     for (int i = 0; i < hash_size; i++) {
         trace_info * _trace_info = traces[i];
         ALOGE("FD_TRACKER: ------ dump trace ------");
-        ALOGE("FD_TRACKER: count: %d", _trace_info->count);
+        ALOGE("FD_TRACKER: repetition: %d", _trace_info->count);
         ALOGE("FD_TRACKER: java trace:\n%s", _trace_info->java_stack_trace);
         ALOGE("FD_TRACKER: native trace:\n%s", _trace_info->native_stack_trace);
     }
