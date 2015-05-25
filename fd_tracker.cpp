@@ -135,8 +135,6 @@ void do_trigger() {
 
 void do_report() {
     AutoLock lock(&g_mutex);
-    ALOGE("FD_TRACKER: ****** dump begin ******");
-    // hashmapForEach(g_hash_map, dump_trace, NULL);
 
     int hash_size = hashmapSize(g_hash_map);
     trace_info * traces [hash_size];
@@ -147,6 +145,7 @@ void do_report() {
 
     qsort(traces, hash_size, sizeof(trace_info *), pred_sort_trace);
 
+    ALOGE("FD_TRACKER: ****** dump begin ******");
     for (int i = 0; i < hash_size; i++) {
         trace_info * _trace_info = traces[i];
         ALOGE("FD_TRACKER: ------ dump trace ------");
@@ -154,8 +153,8 @@ void do_report() {
         ALOGE("FD_TRACKER: java trace:\n%s", _trace_info->java_stack_trace);
         ALOGE("FD_TRACKER: native trace:\n%s", _trace_info->native_stack_trace);
     }
-
     ALOGE("FD_TRACKER: ****** dump end ******");
+    
     g_tracking_mode = DISABLED;
 }
 
