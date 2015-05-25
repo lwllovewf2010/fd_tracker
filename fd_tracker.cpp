@@ -17,6 +17,7 @@ struct entry_points g_entry_points;
 
 // FIXME: consider std::atomic for performance ?
 // FIXME: doesn't work for setuid/setgid
+// FIXME: 64-bit
 
 __attribute__((constructor))
 void setup() {
