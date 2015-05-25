@@ -6,6 +6,7 @@
 #include <stdlib.h>
 
 #define TRACK_THRESHHOLD 0.8
+#define RESERVED_CALL_STACK_FD 1
 volatile tracking_mode g_tracking_mode = DISABLED;
 
 int g_rlimit_nofile = -1;
@@ -14,9 +15,7 @@ Hashmap * g_hash_map = NULL;
 pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct entry_points g_entry_points;
 
-// FIXME: what if setrlimit or prlimit is invoked ?
 // FIXME: consider std::atomic for performance ?
-// FIXME: hard/soft rlimit
 // FIXME: doesn't work for setuid/setgid
 
 __attribute__((constructor))
@@ -34,13 +33,13 @@ void setup() {
     struct rlimit limit;
     GET_RLIMIT(limit);
 
-    g_rlimit_nofile = limit.rlim_cur;
+    g_rlimit_nofile = limit.rlim_cur - RESERVED_CALL_STACK_FD;
 
     assert(TRACK_THRESHHOLD > 0 && TRACK_THRESHHOLD < 1);
 
     limit.rlim_cur = (rlim_t) (g_rlimit_nofile * TRACK_THRESHHOLD);
     int ret = setrlimit(RLIMIT_NOFILE, &limit);
-    if (ret) {
+    if (ret == -1) {
         ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
         return;
     }
@@ -65,9 +64,18 @@ void do_track(int fd) {
     struct rlimit limit;
     GET_RLIMIT(limit);
 
-    int orig_limit = limit.rlim_cur;
-    limit.rlim_cur = orig_limit + 1;
+    if (limit.rlim_cur != (rlim_t) g_rlimit_nofile) {
+        ALOGE("FD_TRACKER: RLIMIT seems changed outside, DISABLE");
+        g_tracking_mode = DISABLED;
+        return;
+    }
+    
+    limit.rlim_cur = g_rlimit_nofile + RESERVED_CALL_STACK_FD;
     int ret = setrlimit(RLIMIT_NOFILE, &limit);
+    if (ret == -1) {
+        ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
+        return;
+    }
 
     android::CallStack stack;
     stack.update(4);
@@ -75,8 +83,12 @@ void do_track(int fd) {
     std::ostringstream java_stack;
     art::Runtime::DumpJavaStack(java_stack);
 
-    limit.rlim_cur = orig_limit;
+    limit.rlim_cur = g_rlimit_nofile;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
+    if (ret == -1) {
+        ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
+        return;
+    }
 
     assert(g_hash_array[fd] == NULL);
 
@@ -111,7 +123,7 @@ void do_trigger() {
     }
     limit.rlim_cur = (rlim_t) (g_rlimit_nofile);
     int ret = setrlimit(RLIMIT_NOFILE, &limit);
-    if (ret) {
+    if (ret == -1) {
         ALOGE("FD_TRACKER: setrlimit failed, errno: %d", errno);
         g_tracking_mode = DISABLED;
         return;
@@ -146,38 +158,43 @@ void do_report() {
     g_tracking_mode = DISABLED;
 }
 
+void do_close(int fd) {
+    AutoLock lock(&g_mutex);
+    if (g_tracking_mode != TRIGGERED) {
+        return;
+    }
+
+    char * md5_sum = g_hash_array[fd];
+    if (md5_sum == NULL) {
+        return;
+    }
+            
+    trace_info * _trace_info = (trace_info *) hashmapGet(g_hash_map, md5_sum);
+    assert(_trace_info != NULL);
+            
+    _trace_info->count--;
+    if (_trace_info->count == 0) {
+        free(_trace_info->native_stack_trace);
+        free(_trace_info->java_stack_trace);
+        hashmapRemove(g_hash_map, md5_sum);
+        free(md5_sum);
+    }
+    g_hash_array[fd] = NULL;
+}
+
 extern "C" {
     int close(int fd) {
         int ret = (*g_entry_points.p_close)(fd);
         if (g_tracking_mode != TRIGGERED) {
             return ret;
         }
+        if (ret == -1) {
+            return ret;
+        }
         if (fd < 0 || fd >= g_rlimit_nofile) {
             return ret;
         }
-
-        {
-            AutoLock lock(&g_mutex);
-            if (g_tracking_mode != TRIGGERED) {
-                return ret;
-            }
-            if (g_hash_array[fd] != NULL) {
-                char * md5_sum = g_hash_array[fd];
-                assert(md5_sum != NULL);
-                trace_info * _trace_info = (trace_info *) hashmapGet(g_hash_map, md5_sum);
-                if (_trace_info != NULL) {
-                    _trace_info->count--;
-                }
-                if (_trace_info->count <= 0) {
-                    free(_trace_info->native_stack_trace);
-                    free(_trace_info->java_stack_trace);
-                    hashmapRemove(g_hash_map, md5_sum);
-                }
-
-                free(g_hash_array[fd]);
-                g_hash_array[fd] = NULL;
-            }
-        }
+        do_close(fd);
         return ret;
     }
 
