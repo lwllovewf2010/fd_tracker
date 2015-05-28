@@ -15,6 +15,8 @@ Hashmap * g_hash_map = NULL;
 pthread_mutex_t g_mutex = PTHREAD_MUTEX_INITIALIZER;
 struct entry_points g_entry_points;
 
+pthread_key_t g_key;
+
 // FIXME: consider std::atomic for performance ?
 // FIXME: doesn't work for setuid/setgid
 // FIXME: 64-bit
@@ -116,7 +118,6 @@ void do_track(int fd) {
         _trace_info->count++;
     }
     g_hash_array[fd] = md5_sum;
-    ALOGE("FD_TRACKER: %s", _trace_info->native_stack_trace);
 }
 
 void do_trigger() {

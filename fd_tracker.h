@@ -75,28 +75,38 @@ private:
 #define TRACK_ARRAY(name,...)                   \
     TRACK(DO_TRACK_ARRAY, name, __VA_ARGS__)    \
 
-#define TRACK(DO_TRACK,name,...)                                \
-    do {                                                        \
-        if (g_setup_invoked == 0) {                             \
-            setup();                                            \
-        }                                                       \
-        int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
-        int orig_errno = errno;                                 \
-        if (ret == -1 && orig_errno == EMFILE) {                 \
-            if (g_tracking_mode == NOT_TRIGGERED) {             \
-                do_trigger();                                   \
-                ret = (*g_entry_points.p_##name)(__VA_ARGS__);  \
-            } else if (g_tracking_mode == TRIGGERED) {          \
-                do_report();                                    \
-            }                                                   \
-            errno = orig_errno;                                 \
-        } else {                                                \
-            if (g_tracking_mode == TRIGGERED) {                 \
-                DO_TRACK;                                       \
-            }                                                   \
-        }                                                       \
-        return ret;                                             \
-    } while (0)                                                 \
+#define TRACK(DO_TRACK,name,...)                                        \
+    do {                                                                \
+        if (g_setup_invoked == 0) {                                     \
+            setup();                                                    \
+        }                                                               \
+        int ret = (*g_entry_points.p_##name)(__VA_ARGS__);              \
+        int orig_errno = errno;                                         \
+        if (ret == -1 && orig_errno == EMFILE) {                         \
+            if (g_tracking_mode == NOT_TRIGGERED) {                     \
+                do_trigger();                                           \
+                ret = (*g_entry_points.p_##name)(__VA_ARGS__);          \
+            } else if (g_tracking_mode == TRIGGERED) {                  \
+                do_report();                                            \
+            }                                                           \
+            errno = orig_errno;                                         \
+        } else {                                                        \
+            if (g_tracking_mode == TRIGGERED) {                         \
+                int * is_recursive = (int *) pthread_getspecific(g_key); \
+                if (is_recursive != NULL && *is_recursive == 1) {            \
+                    return ret;                                         \
+                }                                                       \
+                if (is_recursive == NULL) {                                \
+                    is_recursive = (int*) malloc(sizeof(int));          \
+                    pthread_setspecific(g_key, is_recursive);           \
+                }                                                       \
+                *is_recursive = 1;                                      \
+                DO_TRACK;                                               \
+                *is_recursive = 0;                                      \
+            }                                                           \
+        }                                                               \
+        return ret;                                                     \
+    } while (0)                                                         \
 
 #define GET_RLIMIT(LIMIT)                                               \
     do {                                                                \
@@ -111,6 +121,6 @@ private:
             g_tracking_mode = DISABLED;                                 \
             return;                                                     \
         }                                                               \
-    } while (0)                                                         \
+        } while (0)                                                     \
 
 #endif  // FD_TRACKER_H
