@@ -18,19 +18,24 @@ struct entry_points g_entry_points;
 // FIXME: consider std::atomic for performance ?
 // FIXME: doesn't work for setuid/setgid
 // FIXME: 64-bit
-
-__attribute__((constructor))
+volatile int g_setup_invoked = 0;
 void setup() {
+    {
+        AutoLock lock(&g_mutex);
+        if (g_setup_invoked == 1) {
+            return;
+        }
 #define ENTRYPOINT_ENUM(name, rettype, ...)                             \
-    typedef rettype (*FUNC_##name)(__VA_ARGS__);                        \
-    g_entry_points.p_##name = (FUNC_##name) dlsym(RTLD_NEXT, #name);    \
+        typedef rettype (*FUNC_##name)(__VA_ARGS__);                    \
+        g_entry_points.p_##name = (FUNC_##name) dlsym(RTLD_NEXT, #name); \
 
 #include "entry_points.h"
-    ENTRYPOINT_LIST(ENTRYPOINT_ENUM);
+        ENTRYPOINT_LIST(ENTRYPOINT_ENUM);
 
 #undef ENTRYPOINT_LIST
 #undef ENTRYPOINT_ENUM
-
+        g_setup_invoked = 1;
+    }
     struct rlimit limit;
     GET_RLIMIT(limit);
 
@@ -49,6 +54,7 @@ void setup() {
     g_hash_array = (char**) malloc(sizeof(char*) * (g_rlimit_nofile));
     bzero(g_hash_array, sizeof(char*) * g_rlimit_nofile);
     g_hash_map = hashmapCreate(g_rlimit_nofile, pred_str_hash, pred_str_equals);
+    ALOGE("FD_TRACKER: setup");
 }
 
 void do_track(int fd) {
@@ -56,6 +62,7 @@ void do_track(int fd) {
     if (g_tracking_mode != TRIGGERED) {
         return;
     };
+    ALOGE("FD_TRACKER: do_track: %d", fd);
     assert(fd >= 0);
     if (fd >= g_rlimit_nofile) {
         ALOGE("FD_TRACKER: fd: %d exceed rlimit: %d?", fd, g_rlimit_nofile);
@@ -78,12 +85,15 @@ void do_track(int fd) {
         return;
     }
 
+    ALOGE("FD_TRACKER: get native stack");
     android::CallStack stack;
     stack.update(4);
 
+    ALOGE("FD_TRACKER: get java stack");
     std::ostringstream java_stack;
     art::Runtime::DumpJavaStack(java_stack);
 
+    ALOGE("FD_TRACKER: get stack done");
     limit.rlim_cur = g_rlimit_nofile;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret == -1) {
@@ -106,6 +116,7 @@ void do_track(int fd) {
         _trace_info->count++;
     }
     g_hash_array[fd] = md5_sum;
+    ALOGE("FD_TRACKER: %s", _trace_info->native_stack_trace);
 }
 
 void do_trigger() {
@@ -184,6 +195,9 @@ void do_close(int fd) {
 
 extern "C" {
     int close(int fd) {
+        if (g_setup_invoked == 0) {
+            setup();
+        }
         int ret = (*g_entry_points.p_close)(fd);
         if (g_tracking_mode != TRIGGERED) {
             return ret;

@@ -77,6 +77,9 @@ private:
 
 #define TRACK(DO_TRACK,name,...)                                \
     do {                                                        \
+        if (g_setup_invoked == 0) {                             \
+            setup();                                            \
+        }                                                       \
         int ret = (*g_entry_points.p_##name)(__VA_ARGS__);      \
         int orig_errno = errno;                                 \
         if (ret == -1 && orig_errno == EMFILE) {                 \
