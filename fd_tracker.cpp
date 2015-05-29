@@ -211,6 +211,7 @@ extern "C" {
             return ret;
         }
         
+        do_close(fd);
         return ret;
     }
 
