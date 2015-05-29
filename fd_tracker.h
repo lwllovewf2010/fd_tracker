@@ -86,14 +86,15 @@ private:
             if (g_tracking_mode == NOT_TRIGGERED) {                     \
                 do_trigger();                                           \
                 ret = (*g_entry_points.p_##name)(__VA_ARGS__);          \
+                return ret;                                             \
             } else if (g_tracking_mode == TRIGGERED) {                  \
                 do_report();                                            \
             }                                                           \
-            errno = orig_errno;                                         \
         } else {                                                        \
             if (g_tracking_mode == TRIGGERED) {                         \
                 int * is_recursive = (int *) pthread_getspecific(g_key); \
                 if (is_recursive != NULL && *is_recursive == 1) {            \
+                    errno = orig_errno;                                 \
                     return ret;                                         \
                 }                                                       \
                 if (is_recursive == NULL) {                                \
@@ -105,6 +106,7 @@ private:
                 *is_recursive = 0;                                      \
             }                                                           \
         }                                                               \
+        errno = orig_errno;                                             \
         return ret;                                                     \
     } while (0)                                                         \
 
