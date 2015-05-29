@@ -36,6 +36,7 @@ void setup() {
 
 #undef ENTRYPOINT_LIST
 #undef ENTRYPOINT_ENUM
+        pthread_key_create(&g_key,NULL);
         g_setup_invoked = 1;
     }
     struct rlimit limit;
@@ -56,7 +57,6 @@ void setup() {
     g_hash_array = (char**) malloc(sizeof(char*) * (g_rlimit_nofile));
     bzero(g_hash_array, sizeof(char*) * g_rlimit_nofile);
     g_hash_map = hashmapCreate(g_rlimit_nofile, pred_str_hash, pred_str_equals);
-    ALOGE("FD_TRACKER: setup");
 }
 
 void do_track(int fd) {
@@ -64,7 +64,6 @@ void do_track(int fd) {
     if (g_tracking_mode != TRIGGERED) {
         return;
     };
-    ALOGE("FD_TRACKER: do_track: %d", fd);
     assert(fd >= 0);
     if (fd >= g_rlimit_nofile) {
         ALOGE("FD_TRACKER: fd: %d exceed rlimit: %d?", fd, g_rlimit_nofile);
@@ -87,15 +86,12 @@ void do_track(int fd) {
         return;
     }
 
-    ALOGE("FD_TRACKER: get native stack");
     android::CallStack stack;
     stack.update(4);
 
-    ALOGE("FD_TRACKER: get java stack");
     std::ostringstream java_stack;
     art::Runtime::DumpJavaStack(java_stack);
 
-    ALOGE("FD_TRACKER: get stack done");
     limit.rlim_cur = g_rlimit_nofile;
     ret = setrlimit(RLIMIT_NOFILE, &limit);
     if (ret == -1) {
@@ -209,7 +205,12 @@ extern "C" {
         if (fd < 0 || fd >= g_rlimit_nofile) {
             return ret;
         }
-        do_close(fd);
+
+        int * is_recursive = (int *) pthread_getspecific(g_key);
+        if (is_recursive != NULL && *is_recursive == 1) {
+            return ret;
+        }
+        
         return ret;
     }
 
