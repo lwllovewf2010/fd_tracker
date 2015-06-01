@@ -1,6 +1,6 @@
 #define ENTRYPOINT_LIST(V)                              \
     V(close, int, int)                                  \
-    V(open, int, const char *, int)                     \
+    V(open, int, const char *, int, ...)                \
     V(creat, int, const char *, mode_t)                 \
     V (socket, int, int, int, int)                      \
     V (socketpair, int, int, int, int, int[2])          \

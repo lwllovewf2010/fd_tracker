@@ -215,8 +215,17 @@ extern "C" {
         return ret;
     }
 
-    int open(const char *pathname, int flags) {
-        TRACK_RET(open, pathname, flags);
+    int open(const char *pathname, int flags, ...) {
+        mode_t mode = 0;
+        if ((flags & O_CREAT) != 0) {
+            va_list args;
+            va_start(args, flags);
+            mode = (mode_t) va_arg(args, int);
+            va_end(args);
+            TRACK_RET(open, pathname, flags, mode);
+        } else {
+            TRACK_RET(open, pathname, flags);
+        }
     }
 
     // opendir/closedir is not tracked, since they are implemented
