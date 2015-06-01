@@ -250,8 +250,8 @@ extern "C" {
         TRACK_ARRAY(pipe, array);
     }
 
-    int pipe2 (int fd[2], int flags) {
-        TRACK_RET(pipe2, fd, flags);
+    int pipe2 (int array[2], int flags) {
+        TRACK_ARRAY(pipe2, array, flags);
     }
 
     int creat(const char *path, mode_t mod) {
